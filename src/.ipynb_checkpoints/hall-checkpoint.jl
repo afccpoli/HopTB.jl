@@ -253,7 +253,7 @@ function get_berry_curvature_dipole(
     return result / (2π)^3
 end
 
-
+end
 
 ################################################################################
 ##  Berry curvature quadrupole
@@ -298,3 +298,4 @@ function get_berry_curvature_quadrupole(
     return result / (2π)^3
 end
 
+end
