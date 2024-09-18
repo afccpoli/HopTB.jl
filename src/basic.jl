@@ -230,6 +230,12 @@ function getorder(α::Int64, β::Int64)::Tuple{Int64, Int64, Int64}
     return Tuple(order)
 end
 
+function getorder(α::Int64, β::Int64,γ::Int64)::Tuple{Int64, Int64, Int64}
+    order = zeros(Int64, 3)
+    order[α] += 1; order[β] += 1; order[γ] += 1
+    return Tuple(order)
+end
+
 
 @memoize k function getD(tm::AbstractTBModel, α::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
     order = getorder(α)
@@ -242,13 +248,88 @@ end
         if abs(En-Em) > DEGEN_THRESH[1]
             D[n, m] = (dHbar[n, m]-Em*dSbar[n, m])/(Em-En)
         else
-            D[n, m] = im*Awbar[n, m]
+            D[n, m] = im*Awbar[n,m]
         end
     end
     return D
 end
 
 
+@memoize k function getHαnm(tm::AbstractTBModel, α::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    order = getorder(α)
+    dHbar = getdHbar(tm, order, k); dSbar = getdSbar(tm, order, k)
+    Es = geteig(tm, k).values
+    H = zeros(ComplexF64, tm.norbits, tm.norbits)
+    Awbar = getAwbar(tm, α, k)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        H[n, m] = (dHbar[n, m]-Em*dSbar[n, m])
+    end
+    return H
+end
+
+@memoize k function getD2(tm::AbstractTBModel, α::Int64,β::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    Es, _ = geteig(tm, k)
+    m = 0  # 初始化 m
+    n = 0  # 初始化 n
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    dEs = zeros(tm.norbits)
+    foo1 = dHαbar * Dβ + dHβbar * Dα
+    foo2 = dSαbar * Dβ + dSβbar * Dα
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k) 
+    foo4αβ = Dα*Dβ
+    foo4βα = Dβ*Dα
+    foo5αβ = zeros(ComplexF64, tm.norbits, tm.norbits)
+    foo5βα = zeros(ComplexF64, tm.norbits, tm.norbits)
+    D2 = zeros(ComplexF64, tm.norbits, tm.norbits)
+    Awαβ = getdAwbar(tm, α, getorder(β), k)
+    Awα = getAwbar(tm, α, k)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        foo5αβ[n,m]=(foo3α[m]-foo3α[n])*Dβ[n,m]
+        foo5βα[n,m]=(foo3β[m]-foo3β[n])*Dα[n,m]
+        if abs(En-Em) > DEGEN_THRESH[1]
+            D2[n, m] += (dHαβbar[n, m] - dSαβbar[n, m] * Em)/(Em-En)
+            D2[n, m] += (foo1[n, m])/(Em-En)
+            D2[n, m] -= (foo2[n, m] * Em)/(Em-En)
+            D2[n, m] -= (dSαbar[n,m] * foo3β[m] + dSβbar[n, m] * foo3α[m])/(Em-En)
+            D2[n, m] -= (foo5αβ[n,m]+foo5βα[n,m])/(Em-En)
+            D2[n, m] -= (foo4αβ[n,m]+foo4βα[n,m])
+        else
+            D2[n, m] = im*Awαβ[n, m]+Awα*Dβ
+        end
+    end
+    return D2
+end
+
+@memoize k function getDl(tm::AbstractTBModel, α::Int64,β::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    Es, _ = geteig(tm, k)
+    m = 0  # 初始化 m
+    n = 0  # 初始化 n
+    eβα=gete(tm,β,α,k)
+    eαβ=gete(tm,α,β,k)
+    eab=gete2(tm,α,β,k)
+    Dl = zeros(ComplexF64, tm.norbits, tm.norbits)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        if abs(En-Em) > DEGEN_THRESH[1]
+            Dl[n, m] += eab[n,m]
+            Dl[n, m] += eαβ[n,m]
+            Dl[n, m] += eβα[n,m]
+        else
+            Dl[n, m] = 0
+        end
+    end
+    return Dl
+end
 """
 ```julia
 getdEs(tm::AbstractTBModel, α::Int64, k::AbstractVector{<:Real})
@@ -324,8 +405,134 @@ never be modified.
     return dEs
 end
 
+@doc raw"""
+```julia
+getdEs(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    k::AbstractVector{<:Real}
+) => dEs::Vector{Float64}
+```
 
+Calculate d^2 E / dkα dkβ for `tm` at `k`. `α` and `β` are Cartesian directions.
+
+dEs[n,m] is only correct if n is nondegenerate or completely degenerate.
+
+This function is memoized, which means the arguments and results of the function should
+never be modified.
 """
+@memoize k function getdHs(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    k::AbstractVector{<:Real}
+)::Matrix{ComplexF64}
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    dEs = zeros(ComplexF64, tm.norbits, tm.norbits)
+    foo1 = dHαbar * Dβ + dHβbar * Dα
+    foo2 = dSαbar * Dβ + dSβbar * Dα
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        dEs[n,m] += real(dHαβbar[n, m] - dSαβbar[n, m] * Es[m])
+        dEs[n,m] += real(foo1[n, m])
+        dEs[n,m] -= real(foo2[n, m] * Es[m])
+        dEs[n,m] -= real(dSαbar[n, m] * foo3β[m] + dSβbar[n, m] * foo3α[m])
+        dEs[n,m] -= real(Dα[n, m] * foo3β[m] + Dβ[n, m] * foo3α[m])
+    end
+    return dEs
+end
+
+
+@doc raw"""
+```julia
+getdEs(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    k::AbstractVector{<:Real}
+) => dEs::Vector{Float64}
+```
+
+Calculate d^3 E / dkα dkβ dkγ for `tm` at `k`. `α` and `β``γ` are Cartesian directions.
+
+dEs[n] is only correct if n is nondegenerate or completely degenerate.
+
+This function is memoized, which means the arguments and results of the function should
+never be modified.
+"""
+
+
+@memoize k function getdEs(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    γ::Integer,    
+    k::AbstractVector{<:Real}
+)::Vector{Float64}
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dHγbar = getdHbar(tm, getorder(γ), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dSγbar = getdSbar(tm, getorder(γ), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dHβγbar = getdHbar(tm, getorder(β,γ), k)
+    dHγαbar = getdHbar(tm, getorder(γ,α), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    dSβγbar = getdSbar(tm, getorder(β,γ), k)
+    dSγαbar = getdSbar(tm, getorder(γ,α), k)
+    dHαβγbar = getdHbar(tm, getorder(α, β, γ), k)
+    dSαβγbar = getdSbar(tm, getorder(α, β, γ), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    Dγ = getD(tm, γ, k)
+    Dαβ = getD2(tm, α,β, k)
+    Dβγ = getD2(tm, β,γ, k)
+    Dγα = getD2(tm, γ,α, k)
+    dEs = zeros(tm.norbits)
+    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(dHαbar*Dβ*Dγ+dHαbar*Dγ*Dβ+dHβbar*Dα*Dγ+dHβbar*Dγ*Dα + dHγbar*Dα*Dβ + dHγbar*Dβ*Dα)*1/2
+    foo2 = (dSαβbar * Dγ + dSβγbar * Dα +dSγαbar * Dβ) +(dSαbar*Dβ*Dγ+dSαbar*Dγ*Dβ+dSβbar*Dα*Dγ+dSβbar*Dγ*Dα + dSγbar*Dα*Dβ + dSγbar*Dβ*Dα)*1/2
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    foo3γ = getdEs(tm, γ, k)
+    foo3αβ = getdEs(tm, α, β, k)
+    foo3βγ = getdEs(tm, β, γ, k)
+    foo3γα = getdEs(tm, γ, α, k)
+    foo4αβ = dSαbar*Dβ
+    foo4αγ = dSαbar*Dγ
+    foo4βα = dSβbar*Dα
+    foo4βγ = dSβbar*Dγ
+    foo4γα = dSγbar*Dα
+    foo4γβ = dSγbar*Dβ
+    foo5αβ = Dα*Dβ
+    foo5αγ = Dα*Dγ
+    foo5βα = Dβ*Dα
+    foo5βγ = Dβ*Dγ
+    foo5γα = Dγ*Dα
+    foo5γβ = Dγ*Dβ
+    for n in 1:tm.norbits
+        dEs[n] += real(dHαβγbar[n, n] - dSαβγbar[n, n] * Es[n])
+        dEs[n] += real(foo1[n, n])
+        dEs[n] -= real(foo2[n, n] * Es[n])
+        dEs[n] -= real((dSαβbar[n, n] * foo3γ[n] + dSβγbar[n, n] * foo3α[n]+dSγαbar[n, n] * foo3β[n]))
+        dEs[n] -= real((dSγbar[n,n]*foo3αβ[n] + dSαbar[n,n]*foo3βγ[n]+dSβbar[n,n]*foo3γα[n])+(dSαbar[n,n]*foo3β[n]*Dγ[n, n]+dSαbar[n,n]*foo3γ[n]*Dβ[n, n] + dSγbar[n,n]*foo3α[n]*Dβ[n, n]+dSγbar[n,n]*foo3β[n]*Dα[n, n]+dSβbar[n,n]*foo3γ[n]*Dα[n, n]+dSβbar[n,n]*foo3α[n]*Dγ[n, n]))
+        dEs[n] -=real((Dγ[n,n]*foo3αβ[n] + Dα[n,n]*foo3βγ[n]+Dβ[n,n]*foo3γα[n])+(Dα[n,n]*foo3β[n]*Dγ[n, n]+Dα[n,n]*foo3γ[n]*Dβ[n, n] + Dγ[n,n]*foo3α[n]*Dβ[n, n]+Dγ[n,n]*foo3β[n]*Dα[n, n]+Dβ[n,n]*foo3γ[n]*Dα[n, n]+Dβ[n,n]*foo3α[n]*Dγ[n, n])*1/2)
+    end
+    return dEs
+end    
+"""
+
 ```julia
 getA(tm::AbstractTBModel, α::Int64, k::AbstractVector{<:Real})
 -->A::Matrix{ComplexF64}
@@ -338,7 +545,7 @@ is Eq. (14). Since Eq. (14) assumes band m is nondegenerate, A[n, m] is only
 correct if m is nondegenerate or completely degenerate.
 """
 @memoize k function getA(tm::AbstractTBModel, α::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
-    A = im*getD(tm, α, k)+getAwbar(tm, α, k)
+    A = im*getD(tm, α, k) + getAwbar(tm, α, k)
     return A
 end
 
@@ -452,13 +659,75 @@ Calculate Berry curvature Ω for `tm` at `k`.
     _, V = geteig(tm, k)
     Sbar_α = V' * getdS(tm, getorder(α), k) * V
     Sbar_β = V' * getdS(tm, getorder(β), k) * V
-    Abar_α = V' * HopTB.getAw(tm, α, k) * V
-    Abar_β = V' * HopTB.getAw(tm, β, k) * V
+    Abar_α =V'* HopTB.getAw(tm, α, k) *V
+    Abar_β =V'* HopTB.getAw(tm, β, k) *V
     D_α = HopTB.getD(tm, α, k)
     D_β = HopTB.getD(tm, β, k)
     dAw_βα = HopTB.getdAw(tm, β, getorder(α), k)
     dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
     Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
-    return real(diag(Ωbar_αβ - Sbar_α * Abar_β + Sbar_β * Abar_α - im * D_α * D_β +
-        im * D_β * D_α - D_α * Abar_β + Abar_β * D_α + D_β * Abar_α - Abar_α * D_β))
+    return real(diag(Ωbar_αβ - Sbar_α * Abar_β + Sbar_β * Abar_α - im * D_α * D_β + im * D_β * D_α +  D_β * Abar_α- Abar_α * D_β- D_α * Abar_β + Abar_β * D_α ))
+end
+
+
+@memoize k function gete(tm::AbstractTBModel, α::Int64, β::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    Ha=HopTB.getHαnm(tm,α,k)
+    Hb=HopTB.getHαnm(tm,β,k)
+    foo=Ha*D_β-D_α*Hb
+    Es = geteig(tm, k).values
+    D = zeros(ComplexF64, tm.norbits, tm.norbits)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        if abs(En-Em) > DEGEN_THRESH[1]
+            D[n, m] = foo[n,m]/(Em-En)
+        else
+            D[n, m] = 0
+        end
+    end
+    return D
+end
+
+@memoize k function gete2(tm::AbstractTBModel, α::Int64, β::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    Hab= HopTB.getdHs(tm,α,β,k)
+    Es = geteig(tm, k).values
+    D = zeros(ComplexF64, tm.norbits, tm.norbits)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        if abs(En-Em) > DEGEN_THRESH[1]
+            D[n, m] = Hab[n,m]/(Em-En)
+        else
+            D[n, m] = 0
+        end
+    end
+    return D
+end
+"""
+```julia
+get_berry_curvature(tm::AbstractTBModel, α::Int64, β::Int64, k::Vector{<:Real})::Vector{Float64}
+```
+
+Calculate Berry curvature Ω for `tm` at `k`.
+
+Ω[n] is only correct if band n is nondegenerate or completely degenerate.
+"""
+@memoize k function get_berry_curvature_dipole(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64, k::Vector{<:Real})
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    eβγ=gete(tm,β,γ,k)
+    eγβ=gete(tm,γ,β,k)
+    eαγ=gete(tm,α,γ,k)
+    eγα=gete(tm,γ,α,k)
+    ebc=gete2(tm,β,γ,k)
+    eac=gete2(tm,α,γ,k)
+    return real(diag(-im*D_α*ebc -im * D_α * eβγ -im * D_α * eγβ+im*D_β*eac+im * D_β * eαγ+im*D_β*eγα))
+end
+
+@memoize k function get_berry_curvature_dipole2(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64, k::Vector{<:Real})
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    D_αγ = HopTB.getDl(tm,α,γ,k)
+    D_βγ = HopTB.getDl(tm,β,γ,k)
+    return real(diag(-im*D_α*D_βγ -im*D_αγ*D_β))
 end

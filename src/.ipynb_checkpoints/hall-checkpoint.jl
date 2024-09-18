@@ -253,7 +253,7 @@ function get_berry_curvature_dipole(
     return result / (2π)^3
 end
 
-end
+
 
 ################################################################################
 ##  Berry curvature quadrupole
@@ -275,10 +275,10 @@ Calculate
 ```math
 \sum_n \int_{\text{FS}_n} \frac{d \sigma}{(2\pi)^3} \Omega_{n}^{\alpha \beta} \frac{dk_{γ}d_{δ}Es_n}{|\boldsymbol{v}_n|}
 ```
-which is related to the Berry curvature dipole contribution to the second order photocurrent.
+which is related to the Berry curvature quadrupole contribution to the second order photocurrent.
 """
 function get_berry_curvature_quadrupole(
-    tm::AbstractTBModel,
+    tm::AbstractTBModel, 
     α::Int64,
     β::Int64,
     γ::Int64,
@@ -288,14 +288,50 @@ function get_berry_curvature_quadrupole(
     result = 0.0
     for fs in fss
         result += parallel_sum(ik -> begin
-            k = fs.ks[:;ik]
+            k = fs.ks[:,ik]
             Ω= get_berry_curvature(tm, α, β, k)[fs.bandidx]
-            Eab=getdEs(tm, γ, δ, k)[fs.bandidx]
+            Eab=getdEs(tm,γ,δ,k)[fs.bandidx]
             v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
-            Ω*Eab[γ][δ] * fs.weights[ik]/ norm(v) 
+            Ω * Eab * fs.weights[ik] / norm(v)
         end, 1:size(fs.ks, 2), 0.0)
     end
     return result / (2π)^3
 end
+@doc raw"""
+```
+get_third_Drude-like_term(
+    tm::AbstractTBModel,
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64
+    fss::Vector{FermiSurface}
+)::Float64
+```
 
+Calculate
+```math
+\sum_n \int_{\text{FS}_n} \frac{d \sigma}{(2\pi)^3} \Omega_{n}^{\alpha \beta} \frac{dk_{γ}d_{δ}Es_n}{|\boldsymbol{v}_n|}
+```
+which is related to the Berry curvature quadrupole contribution to the second order photocurrent.
+"""
+function get_third_Drudelike_term(
+    tm::AbstractTBModel, 
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64,
+    fss::Vector{FermiSurface}
+)
+    result = 0.0
+    for fs in fss
+        result += parallel_sum(ik -> begin
+            k = fs.ks[:,ik]
+            Eabc=getdEs(tm,β,γ,δ,k)[fs.bandidx]
+            v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
+            v[α] * Eabc * fs.weights[ik] / norm(v)
+        end, 1:size(fs.ks, 2), 0.0)
+    end
+    return result / (2π)^3
+end
 end
