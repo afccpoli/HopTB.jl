@@ -1,0 +1,60 @@
+@memoize k function getdEs(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    γ::Integer,    
+    k::AbstractVector{<:Real}
+)::Vector{Float64}
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dHγbar = getdHbar(tm, getorder(γ), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dSγbar = getdSbar(tm, getorder(γ), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dHβγbar = getdHbar(tm, getorder(β,γ), k)
+    dHγαbar = getdHbar(tm, getorder(γ,α), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    dSβγbar = getdSbar(tm, getorder(β,γ), k)
+    dSγαbar = getdSbar(tm, getorder(γ,α), k)
+    dHαβγbar = getdHbar(tm, getorder(α, β, γ), k)
+    dSαβγbar = getdSbar(tm, getorder(α, β, γ), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    Dγ = getD(tm, γ, k)
+    Dαβ = getD2(tm, α,β, k)
+    Dβγ = getD2(tm, β,γ, k)
+    Dγα = getD2(tm, γ,α, k)
+    dEs = zeros(tm.norbits)
+    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(dHγbar*Dαβ + dHαbar*Dβγ+dHβbar*Dγα) + (dHαbar*Dβ*Dγ+dHαbar*Dγ*Dβ+dHβbar*Dα*Dγ+dHβbar*Dγ*Dα + dHγbar*Dα*Dβ + dHγbar*Dβ*Dα)*1/2
+    foo2 = (dSαβbar * Dγ + dSβγbar * Dα +dSγαbar * Dβ) +(dSγbar*Dαβ + dSαbar*Dβγ+dSβbar*Dγα) + (dSαbar*Dβ*Dγ+dSαbar*Dγ*Dβ+dSβbar*Dα*Dγ+dSβbar*Dγ*Dα + dSγbar*Dα*Dβ + dSγbar*Dβ*Dα)*1/2
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    foo3γ = getdEs(tm, γ, k)
+    foo3αβ = getdEs(tm, α, β, k)
+    foo3βγ = getdEs(tm, β, γ, k)
+    foo3γα = getdEs(tm, γ, α, k)
+    foo4αβ = dSαbar*Dβ
+    foo4αγ = dSαbar*Dγ
+    foo4βα = dSβbar*Dα
+    foo4βγ = dSβbar*Dγ
+    foo4γα = dSγbar*Dα
+    foo4γβ = dSγbar*Dβ
+    foo5αβ = Dα*Dβ
+    foo5αγ = Dα*Dγ
+    foo5βα = Dβ*Dα
+    foo5βγ = Dβ*Dγ
+    foo5γα = Dγ*Dα
+    foo5γβ = Dγ*Dβ
+    for n in 1:tm.norbits
+        dEs[n] += real(dHαβγbar[n, n] - dSαβγbar[n, n] * Es[n])
+        dEs[n] += real(foo1[n, n])
+        dEs[n] -= real(foo2[n, n] * Es[n])
+        dEs[n] -= real((dSαβbar[n, n] * foo3γ[n] + dSβγbar[n, n] * foo3α[n]+dSγαbar[n, n] * foo3β[n]))
+        dEs[n] -= real((dSγbar[n,n]*foo3αβ[n] + dSαbar[n,n]*foo3βγ[n]+dSβbar[n,n]*foo3γα[n])+(dSαbar[n,n]*foo3β[n]*Dγ[n, n]+dSαbar[n,n]*foo3γ[n]*Dβ[n, n] + dSγbar[n,n]*foo3α[n]*Dβ[n, n]+dSγbar[n,n]*foo3β[n]*Dα[n, n]+dSβbar[n,n]*foo3γ[n]*Dα[n, n]+dSβbar[n,n]*foo3α[n]*Dγ[n, n]))
+        dEs[n] -=real((Dγ[n,n]*foo3αβ[n] + Dα[n,n]*foo3βγ[n]+Dβ[n,n]*foo3γα[n])+(Dα[n,n]*foo3β[n]*Dγ[n, n]+Dα[n,n]*foo3γ[n]*Dβ[n, n] + Dγ[n,n]*foo3α[n]*Dβ[n, n]+Dγ[n,n]*foo3β[n]*Dα[n, n]+Dβ[n,n]*foo3γ[n]*Dα[n, n]+Dβ[n,n]*foo3α[n]*Dγ[n, n]))
+        dEs[n] -= real((Dαβ[n, n] * foo3γ[n] + Dβγ[n, n] * foo3α[n]+Dγα[n, n] * foo3β[n]))
+    end
+    return dEs
+end
