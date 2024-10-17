@@ -260,10 +260,11 @@ end
     dHbar = getdHbar(tm, order, k); dSbar = getdSbar(tm, order, k)
     Es = geteig(tm, k).values
     H = zeros(ComplexF64, tm.norbits, tm.norbits)
+    Dα=getD(tm,α,k)
     Awbar = getAwbar(tm, α, k)
     for m in 1:tm.norbits, n in 1:tm.norbits
         En = Es[n]; Em = Es[m]
-        H[n, m] = (dHbar[n, m]-Em*dSbar[n, m])
+        H[n, m] = (dHbar[n, m]-Em*dSbar[n, m]-Dα[n,m]*Em+En*Dα[n,m])
     end
     return H
 end
@@ -294,17 +295,16 @@ end
     Awα = getAwbar(tm, α, k)
     for m in 1:tm.norbits, n in 1:tm.norbits
         En = Es[n]; Em = Es[m]
-        foo5αβ[n,m]=(foo3α[m]-foo3α[n])*Dβ[n,m]
-        foo5βα[n,m]=(foo3β[m]-foo3β[n])*Dα[n,m]
+        foo5αβ[n,m]=foo3α[m]*Dβ[n,m]
+        foo5βα[n,m]=foo3β[m]*Dα[n,m]
         if abs(En-Em) > DEGEN_THRESH[1]
             D2[n, m] += (dHαβbar[n, m] - dSαβbar[n, m] * Em)/(Em-En)
             D2[n, m] += (foo1[n, m])/(Em-En)
             D2[n, m] -= (foo2[n, m] * Em)/(Em-En)
             D2[n, m] -= (dSαbar[n,m] * foo3β[m] + dSβbar[n, m] * foo3α[m])/(Em-En)
             D2[n, m] -= (foo5αβ[n,m]+foo5βα[n,m])/(Em-En)
-            D2[n, m] -= (foo4αβ[n,m]+foo4βα[n,m])
         else
-            D2[n, m] = im*Awαβ[n, m]+Awα*Dβ
+            D2[n, m] = 0
         end
     end
     return D2
@@ -443,11 +443,11 @@ never be modified.
     foo3α = getdEs(tm, α, k)
     foo3β = getdEs(tm, β, k)
     for m in 1:tm.norbits, n in 1:tm.norbits
-        dEs[n,m] += dHαβbar[n, m] - dSαβbar[n, m] * Es[m]
-        dEs[n,m] += foo1[n, m]
-        dEs[n,m] -= foo2[n, m] * Es[m]
-        dEs[n,m] -= dSαbar[n, m] * foo3β[m] + dSβbar[n, m] * foo3α[m]
-        dEs[n,m] -=  foo3β[n]*Dα[n, m]  + foo3α[n]*Dβ[n, m] 
+            dEs[n,m] += dHαβbar[n, m] - dSαβbar[n, m] * Es[m]
+            dEs[n,m] += foo1[n, m]
+            dEs[n,m] -= foo2[n, m] * Es[m]
+            dEs[n,m] -= dSαbar[n, m] * foo3β[m] + dSβbar[n, m] * foo3α[m]
+            dEs[n,m] -= Dα[n, m]*foo3β[n]  + Dβ[n, m]*foo3α[n]
     end
     return dEs
 end
@@ -529,6 +529,128 @@ never be modified.
     return dEs
 end  
 
+@memoize k function getdEs2(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    γ::Integer,    
+    k::AbstractVector{<:Real}
+)::Vector{Float64}
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dHγbar = getdHbar(tm, getorder(γ), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dSγbar = getdSbar(tm, getorder(γ), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dHβγbar = getdHbar(tm, getorder(β,γ), k)
+    dHγαbar = getdHbar(tm, getorder(γ,α), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    dSβγbar = getdSbar(tm, getorder(β,γ), k)
+    dSγαbar = getdSbar(tm, getorder(γ,α), k)
+    dHαβγbar = getdHbar(tm, getorder(α, β, γ), k)
+    dSαβγbar = getdSbar(tm, getorder(α, β, γ), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    Dγ = getD(tm, γ, k)
+    Dαβ = getDl(tm,α,β,k)
+    Dβγ = getDl(tm,β,γ,k)
+    Dγα = getDl(tm,γ,α,k)
+    dEs = zeros(tm.norbits)
+    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(-dHαbar*Dβ*Dγ+dHαbar*Dβγ+dHαbar*Dγ*Dβ+dHβbar*Dα*Dγ+dHβbar*Dγα-dHβbar*Dγ*Dα - dHγbar*Dα*Dβ +dHγbar*Dαβ+ dHγbar*Dβ*Dα)
+    foo2 = (dSαβbar * Dγ + dSβγbar * Dα +dSγαbar * Dβ) +(dSαbar*Dβ*Dγ+dSαbar*Dγ*Dβ+dSβbar*Dα*Dγ+dSβbar*Dγ*Dα + dSγbar*Dα*Dβ + dSγbar*Dβ*Dα)*1/2
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    foo3γ = getdEs(tm, γ, k)
+    foo3αβ = getdEs(tm, α, β, k)
+    foo3βγ = getdEs(tm, β, γ, k)
+    foo3γα = getdEs(tm, γ, α, k)
+    foo4αβ = dSαbar*Dβ
+    foo4αγ = dSαbar*Dγ
+    foo4βα = dSβbar*Dα
+    foo4βγ = dSβbar*Dγ
+    foo4γα = dSγbar*Dα
+    foo4γβ = dSγbar*Dβ
+    foo5αβ = Dα*Dβ
+    foo5αγ = Dα*Dγ
+    foo5βα = Dβ*Dα
+    foo5βγ = Dβ*Dγ
+    foo5γα = Dγ*Dα
+    foo5γβ = Dγ*Dβ
+    for n in 1:tm.norbits
+        dEs[n] += real(dHαβγbar[n, n] - dSαβγbar[n, n] * Es[n])
+        dEs[n] += real(foo1[n, n])
+        dEs[n] -= real(foo2[n, n] * Es[n])
+        dEs[n] -= real((dSαβbar[n, n] * foo3γ[n] + dSβγbar[n, n] * foo3α[n]+dSγαbar[n, n] * foo3β[n]))
+        dEs[n] -= real((dSγbar[n,n]*foo3αβ[n] + dSαbar[n,n]*foo3βγ[n]+dSβbar[n,n]*foo3γα[n])+(dSαbar[n,n]*foo3β[n]*Dγ[n, n]+dSαbar[n,n]*foo3γ[n]*Dβ[n, n] + dSγbar[n,n]*foo3α[n]*Dβ[n, n]+dSγbar[n,n]*foo3β[n]*Dα[n, n]+dSβbar[n,n]*foo3γ[n]*Dα[n, n]+dSβbar[n,n]*foo3α[n]*Dγ[n, n]))
+        dEs[n] -=real((foo3αβ[n]*Dγ[n,n] +foo3βγ[n]* Dα[n,n]+foo3γα[n]*Dβ[n,n])+(-foo3α[n]*foo5βγ[n,n]+foo3α[n]*Dβγ[n,n]+foo3α[n]*foo5γβ[n,n]+foo3β[n]*foo5αγ[n,n]+foo3β[n]*Dγα[n,n]-foo3β[n]*foo5γα[n,n] - foo3γ[n]*foo5αβ[n,n] +foo3γ[n]*Dαβ[n,n]+ foo3γ[n]*foo5βα[n,n]))
+    end
+    return dEs
+end  
+
+@memoize k function getdEs3(
+    tm::AbstractTBModel,
+    α::Integer,
+    β::Integer,
+    γ::Integer,    
+    k::AbstractVector{<:Real}
+)::Vector{Float64}
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dHγbar = getdHbar(tm, getorder(γ), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dSγbar = getdSbar(tm, getorder(γ), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dHβγbar = getdHbar(tm, getorder(β,γ), k)
+    dHγαbar = getdHbar(tm, getorder(γ,α), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    dSβγbar = getdSbar(tm, getorder(β,γ), k)
+    dSγαbar = getdSbar(tm, getorder(γ,α), k)
+    dHαβγbar = getdHbar(tm, getorder(α, β, γ), k)
+    dSαβγbar = getdSbar(tm, getorder(α, β, γ), k)
+    Dα = getD(tm, α, k)
+    Dβ = getD(tm, β, k)
+    Dγ = getD(tm, γ, k)
+    Dαβ = getDl(tm,α,β,k)
+    Dβγ = getDl(tm,β,γ,k)
+    Dγα = getDl(tm,γ,α,k)
+    Dβα = getDl(tm,β,α,k)
+    Dγβ = getDl(tm,γ,β,k)
+    Dαγ = getDl(tm,α,γ,k)
+    dEs = zeros(tm.norbits)
+    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(dHαbar*Dβγ+dHβbar*Dγα +dHγbar*Dαβ+dHαbar*Dγβ+dHβbar*Dαγ+dHγbar*Dβα)*1/2
+    foo2 = (dSαβbar * Dγ + dSβγbar * Dα +dSγαbar * Dβ) +(dSαbar*Dβ*Dγ+dSαbar*Dγ*Dβ+dSβbar*Dα*Dγ+dSβbar*Dγ*Dα + dSγbar*Dα*Dβ + dSγbar*Dβ*Dα)*1/2
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    foo3γ = getdEs(tm, γ, k)
+    foo3αβ = getdEs(tm, α, β, k)
+    foo3βγ = getdEs(tm, β, γ, k)
+    foo3γα = getdEs(tm, γ, α, k)
+    foo4αβ = dSαbar*Dβ
+    foo4αγ = dSαbar*Dγ
+    foo4βα = dSβbar*Dα
+    foo4βγ = dSβbar*Dγ
+    foo4γα = dSγbar*Dα
+    foo4γβ = dSγbar*Dβ
+    foo5αβ = Dα*Dβ
+    foo5αγ = Dα*Dγ
+    foo5βα = Dβ*Dα
+    foo5βγ = Dβ*Dγ
+    foo5γα = Dγ*Dα
+    foo5γβ = Dγ*Dβ
+    for n in 1:tm.norbits
+        dEs[n] += real(dHαβγbar[n, n] - dSαβγbar[n, n] * Es[n])
+        dEs[n] += real(foo1[n, n])
+        dEs[n] -= real(foo2[n, n] * Es[n])
+        dEs[n] -= real((dSαβbar[n, n] * foo3γ[n] + dSβγbar[n, n] * foo3α[n]+dSγαbar[n, n] * foo3β[n]))
+        dEs[n] -= real((dSγbar[n,n]*foo3αβ[n] + dSαbar[n,n]*foo3βγ[n]+dSβbar[n,n]*foo3γα[n])+(dSαbar[n,n]*foo3β[n]*Dγ[n, n]+dSαbar[n,n]*foo3γ[n]*Dβ[n, n] + dSγbar[n,n]*foo3α[n]*Dβ[n, n]+dSγbar[n,n]*foo3β[n]*Dα[n, n]+dSβbar[n,n]*foo3γ[n]*Dα[n, n]+dSβbar[n,n]*foo3α[n]*Dγ[n, n]))
+        dEs[n] -=real((foo3αβ[n]*Dγ[n,n] +foo3βγ[n]* Dα[n,n]+foo3γα[n]*Dβ[n,n])+(foo3α[n]*Dβγ[n,n]+foo3β[n]*Dγα[n,n]+foo3γ[n]*Dαβ[n,n]+foo3α[n]*Dγβ[n,n]+foo3β[n]*Dαγ[n,n]+foo3γ[n]*Dβα[n,n])*1/2)
+    end
+    return dEs
+end  
 @memoize k function getdHs(
     tm::AbstractTBModel,
     α::Integer,
@@ -554,8 +676,11 @@ end
     Dα = getD(tm, α, k)
     Dβ = getD(tm, β, k)
     Dγ = getD(tm, γ, k)
+    Dαβ = getDl(tm,α,β,k)
+    Dβγ = getDl(tm,β,γ,k)
+    Dγα = getDl(tm,γ,α,k)
     dEs = zeros(ComplexF64, tm.norbits, tm.norbits)
-    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(dHαbar*Dβ*Dγ+dHαbar*Dγ*Dβ+dHβbar*Dα*Dγ+dHβbar*Dγ*Dα + dHγbar*Dα*Dβ + dHγbar*Dβ*Dα)*1/2
+    foo1 = (dHαβbar * Dγ + dHβγbar * Dα +dHγαbar * Dβ) +(-dHαbar*Dβ*Dγ+dHαbar*Dβγ+dHαbar*Dγ*Dβ+dHβbar*Dα*Dγ+dHβbar*Dγα-dHβbar*Dγ*Dα - dHγbar*Dα*Dβ +dHγbar*Dαβ+ dHγbar*Dβ*Dα)
     foo2 = (dSαβbar * Dγ + dSβγbar * Dα +dSγαbar * Dβ) +(dSαbar*Dβ*Dγ+dSαbar*Dγ*Dβ+dSβbar*Dα*Dγ+dSβbar*Dγ*Dα + dSγbar*Dα*Dβ + dSγbar*Dβ*Dα)*1/2
     foo3α = getdEs(tm, α, k)
     foo3β = getdEs(tm, β, k)
@@ -581,7 +706,7 @@ end
         dEs[n,m] -= foo2[n, m] * Es[m]
         dEs[n,m] -= (dSαβbar[n, m] * foo3γ[m] + dSβγbar[n, m] * foo3α[m]+dSγαbar[n, m] * foo3β[m])
         dEs[n,m] -= (dSγbar[n,m]*foo3αβ[m] + dSαbar[n,m]*foo3βγ[m]+dSβbar[n,m]*foo3γα[m])+(dSαbar[n,m]*foo3β[m]*Dγ[m, m]+dSαbar[n,m]*foo3γ[m]*Dβ[m, m]+ dSγbar[n,m]*foo3α[m]*Dβ[m, m]+dSγbar[n,m]*foo3β[m]*Dα[m, m]+dSβbar[n,m]*foo3γ[m]*Dα[m, m]+dSβbar[n,m]*foo3α[m]*Dγ[m, m])
-        dEs[n,m] -=(Dγ[n,m]*foo3αβ[m] + Dα[n,m]*foo3βγ[m]+Dβ[n,m]*foo3γα[m])+(Dα[n,m]*foo3β[m]*Dγ[m, m]+Dα[n,m]*foo3γ[m]*Dβ[m, m] + Dγ[n,m]*foo3α[m]*Dβ[m, m]+Dγ[n,m]*foo3α[m]*Dβ[m, m]+Dγ[n,m]*foo3β[m]*Dα[m, m]+Dβ[n,m]*foo3γ[m]*Dα[m, m]+Dβ[n,m]*foo3α[m]*Dγ[m, m])*1/2
+        dEs[n,m] -=(foo3αβ[n]*Dγ[n,m] +foo3βγ[n]* Dα[n,m]+foo3γα[n]*Dβ[n,m])-foo3α[n]*foo5βγ[n,m]+foo3α[n]*Dβγ[n,m]+foo3α[n]*foo5γβ[n,m]+foo3β[n]*foo5αγ[n,m]+foo3β[n]*Dγα[n,m]-foo3β[n]*foo5γα[n,m] - foo3γ[n]*foo5αβ[n,m] +foo3γ[n]*Dαβ[n,m]+ foo3γ[n]*foo5βα[n,m]
     end
     return dEs
 end   
@@ -742,6 +867,19 @@ Calculate Berry curvature Ω for `tm` at `k`.
     return real(diag(Ωbar_αβ - Sbar_α * Abar_β + Sbar_β * Abar_α - im * D_α * D_β + im * D_β * D_α +  D_β * Abar_α- Abar_α * D_β- D_α * Abar_β + Abar_β * D_α ))
 end
 
+@memoize k function get_berry_curvature2(tm::AbstractTBModel, α::Int64, β::Int64, k::Vector{<:Real})
+    _, V = geteig(tm, k)
+    Sbar_α = V' * getdS(tm, getorder(α), k) * V
+    Sbar_β = V' * getdS(tm, getorder(β), k) * V
+    Abar_α =V'* HopTB.getAw(tm, α, k) *V
+    Abar_β =V'* HopTB.getAw(tm, β, k) *V
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    dAw_βα = HopTB.getdAw(tm, β, getorder(α), k)
+    dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
+    Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
+    return real(diag( -im * D_α * D_β + im * D_β * D_α ))
+end
 
 @memoize k function gete(tm::AbstractTBModel, α::Int64, β::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
     D_α = HopTB.getD(tm, α, k)
@@ -800,37 +938,12 @@ end
 @memoize k function get_berry_curvature_dipole2(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64, k::Vector{<:Real})
     D_α = HopTB.getD(tm, α, k)
     D_β = HopTB.getD(tm, β, k)
-    D_αγ = HopTB.getDl(tm,α,γ,k)
-    D_βγ = HopTB.getDl(tm,β,γ,k)
-    return real(diag(-im*D_α*D_βγ -im*D_αγ*D_β))
+    D_αγ = HopTB.getD2(tm,α,γ,k)
+    D_βγ = HopTB.getD2(tm,β,γ,k)
+    return real(diag(-im*D_α*D_βγ -im*D_αγ*D_β+im * D_βγ * D_α+im * D_β * D_αγ))
 end
 
-@memoize k function getD3(
-    tm::AbstractTBModel,
-    α::Integer,
-    β::Integer,
-    k::AbstractVector{<:Real}
-)::Matrix{ComplexF64}
-    Es, _ = geteig(tm, k)
-    dHαβbar = getdHbar(tm,getorder(α, β), k)
-    Dβ = getD(tm, β, k)
-    dHαbar = getdHbar(tm, getorder(α), k)
-    dEs = zeros(ComplexF64, tm.norbits, tm.norbits)
-    foo1 = -dHαbar * Dβ + Dβ * dHαbar
-    for m in 1:tm.norbits, n in 1:tm.norbits
-        dEs[n,m] += dHαβbar[n, m]
-        dEs[n,m] += foo1[n, m]
-    end
-    return dEs
-end
 
-@memoize k function get_berry_curvature_dipole3(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64, k::Vector{<:Real})
-    D_α = HopTB.getD(tm, α, k)
-    D_β = HopTB.getD(tm, β, k)
-    D_αγ = HopTB.getD3(tm,α,γ,k)
-    D_βγ = HopTB.getD3(tm,β,γ,k)
-    return real(diag(-im*D_α*D_βγ -im*D_αγ*D_β))
-end
 
 @memoize k function getDHs(
     tm::AbstractTBModel,
@@ -884,6 +997,57 @@ end
     return Dll
 end
 
+@memoize k function getD3(tm::AbstractTBModel, α::Int64,β::Int64,γ::Int64, k::AbstractVector{<:Real})::Matrix{ComplexF64}
+    Es, _ = geteig(tm, k)
+    m = 0  # 初始化 m
+    n = 0  # 初始化 n
+    Es, _ = geteig(tm, k)
+    dHαbar = getdHbar(tm, getorder(α), k)
+    dHβbar = getdHbar(tm, getorder(β), k)
+    dHγbar = getdHbar(tm, getorder(γ), k)
+    dSαbar = getdSbar(tm, getorder(α), k)
+    dSβbar = getdSbar(tm, getorder(β), k)
+    dSγbar = getdSbar(tm, getorder(γ), k)
+    dHαβbar = getdHbar(tm, getorder(α, β), k)
+    dHβγbar = getdHbar(tm, getorder(β,γ), k)
+    dHγαbar = getdHbar(tm, getorder(γ,α), k)
+    dSαβbar = getdSbar(tm, getorder(α, β), k)
+    dSβγbar = getdSbar(tm, getorder(β,γ), k)
+    dSγαbar = getdSbar(tm, getorder(γ,α), k)
+    dHαβγbar = getdHbar(tm, getorder(α, β, γ), k)
+    dSαβγbar = getdSbar(tm, getorder(α, β, γ), k)
+    DHβγ=HopTB.getDHs(tm,β,γ,k)
+    DHαγ=HopTB.getDHs(tm,α,γ,k)
+    D_αβ=HopTB.getDl(tm,α,β,k)
+    D_γα=HopTB.getDl(tm,γ,α,k)
+    D_βγ=HopTB.getDl(tm,β,γ,k)
+    D_β = HopTB.getD(tm, β, k)
+    D_α = HopTB.getD(tm, α, k)
+    D_γ = HopTB.getD(tm, γ, k)
+    foo3α = getdEs(tm, α, k)
+    foo3β = getdEs(tm, β, k)
+    foo3γ = getdEs(tm, γ, k)
+    foo3αβ = getdEs(tm, α, β, k)
+    foo3βγ = getdEs(tm, β, γ, k)
+    foo3γα = getdEs(tm, γ, α, k)
+    foo1=dHαβbar*D_γ+dHβγbar*D_α+dHγαbar*D_β
+    foo2=dHαbar*D_βγ+dHβbar*D_γα+dHγbar*D_αβ
+    Dll = zeros(ComplexF64, tm.norbits, tm.norbits)
+    for m in 1:tm.norbits, n in 1:tm.norbits
+        En = Es[n]; Em = Es[m]
+        if abs(En-Em) > DEGEN_THRESH[1]
+            Dll[n, m] += dHαβγbar[n,m]/(Em-En)
+            Dll[n, m] += foo1[n,m]/(Em-En)
+            Dll[n, m] += foo2[n,m]/(Em-En)
+            Dll[n, m] -= (D_α[n,m]*foo3βγ[m]+D_β[n,m]*foo3γα[m]+D_γ[n,m]*foo3αβ[m])/(Em-En)
+            Dll[n, m] -= (D_αβ[n,m]*foo3γ[m]+D_βγ[n,m]*foo3α[m]+D_γα[n,m]*foo3β[m])/(Em-En)
+        else
+            Dll[n, m] = 0
+        end
+    end
+    return Dll
+end
+
 @memoize k function get_berry_curvature_qudrapole2(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64,δ::Int64, k::Vector{<:Real})
     D_α = HopTB.getD(tm, α, k)
     D_β = HopTB.getD(tm, β, k)
@@ -894,4 +1058,16 @@ end
     D_αγδ = HopTB.getDll(tm,α,γ,δ,k)
     D_βγδ = HopTB.getDll(tm,β,γ,δ,k)
     return real(diag(-im*D_α*D_βγδ-im*D_αδ*D_βγ -im*D_αγδ*D_β-im*D_αγ*D_βδ))
+end
+
+@memoize k function get_berry_curvature_quadrupole3(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64,δ::Int64, k::Vector{<:Real})
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    D_αγ = HopTB.getD2(tm,α,γ,k)
+    D_αδ = HopTB.getD2(tm,α,δ,k)
+    D_βγ = HopTB.getD2(tm,β,γ,k)
+    D_βδ = HopTB.getD2(tm,β,δ,k)
+    D_αγδ = HopTB.getD3(tm,α,γ,δ,k)
+    D_βγδ = HopTB.getD3(tm,β,γ,δ,k)
+    return real(diag(-im*D_α*D_βγδ-im*D_αδ*D_βγ -im*D_αγδ*D_β-im*D_αγ*D_βδ+im * D_βγδ * D_α+im * D_β * D_αγδ+im * D_βγ * D_αδ+im * D_βδ * D_αγ))
 end
