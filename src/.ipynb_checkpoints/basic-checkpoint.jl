@@ -248,7 +248,7 @@ end
         if abs(En-Em) > DEGEN_THRESH[1]
             D[n, m] = (dHbar[n, m]-Em*dSbar[n, m])/(Em-En)
         else
-            D[n, m] = im*Awbar[n,m]
+            D[n, m] = 0
         end
     end
     return D
@@ -1030,15 +1030,24 @@ end
     foo3αβ = getdEs(tm, α, β, k)
     foo3βγ = getdEs(tm, β, γ, k)
     foo3γα = getdEs(tm, γ, α, k)
+    foo4αβ = dSαbar*D_β
+    foo4αγ = dSαbar*D_γ
+    foo4βα = dSβbar*D_α
+    foo4βγ = dSβbar*D_γ
+    foo4γα = dSγbar*D_α
+    foo4γβ = dSγbar*D_β
     foo1=dHαβbar*D_γ+dHβγbar*D_α+dHγαbar*D_β
+    foo1s=dSαβbar*D_γ+dSβγbar*D_α+dSγαbar*D_β
     foo2=dHαbar*D_βγ+dHβbar*D_γα+dHγbar*D_αβ
+    foo2s=dSαbar*D_βγ+dSβbar*D_γα+dSγbar*D_αβ
     Dll = zeros(ComplexF64, tm.norbits, tm.norbits)
     for m in 1:tm.norbits, n in 1:tm.norbits
         En = Es[n]; Em = Es[m]
         if abs(En-Em) > DEGEN_THRESH[1]
-            Dll[n, m] += dHαβγbar[n,m]/(Em-En)
-            Dll[n, m] += foo1[n,m]/(Em-En)
-            Dll[n, m] += foo2[n,m]/(Em-En)
+            Dll[n, m] += (dHαβγbar[n,m]- dSαβγbar[n,m]*Em)/(Em-En)
+            Dll[n, m] += (foo1[n,m]-foo1s[n,m])/(Em-En)
+            Dll[n, m] += (foo2[n,m]-foo2s[n,m])/(Em-En)
+            Dll[n, m] -= (foo4αβ[n,m]*foo3γ[m]+foo4αγ[n,m]*foo3β[m]+foo4βα[n,m]*foo3γ[m]+foo4γα[n,m]*foo3β[m]+foo4βγ[n,m]*foo3α[m]+foo4γβ[n,m]*foo3α[m])/(Em-En)
             Dll[n, m] -= (D_α[n,m]*foo3βγ[m]+D_β[n,m]*foo3γα[m]+D_γ[n,m]*foo3αβ[m])/(Em-En)
             Dll[n, m] -= (D_αβ[n,m]*foo3γ[m]+D_βγ[n,m]*foo3α[m]+D_γα[n,m]*foo3β[m])/(Em-En)
         else
