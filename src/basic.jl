@@ -248,7 +248,7 @@ end
         if abs(En-Em) > DEGEN_THRESH[1]
             D[n, m] = (dHbar[n, m]-Em*dSbar[n, m])/(Em-En)
         else
-            D[n, m] = 0
+            D[n, m] = im*Awbar[n,m]
         end
     end
     return D
@@ -293,6 +293,7 @@ end
     D2 = zeros(ComplexF64, tm.norbits, tm.norbits)
     Awαβ = getdAwbar(tm, α, getorder(β), k)
     Awα = getAwbar(tm, α, k)
+    L=Dβ*Awα-Awα*Dβ
     for m in 1:tm.norbits, n in 1:tm.norbits
         En = Es[n]; Em = Es[m]
         foo5αβ[n,m]=foo3α[m]*Dβ[n,m]
@@ -304,7 +305,7 @@ end
             D2[n, m] -= (dSαbar[n,m] * foo3β[m] + dSβbar[n, m] * foo3α[m])/(Em-En)
             D2[n, m] -= (foo5αβ[n,m]+foo5βα[n,m])/(Em-En)
         else
-            D2[n, m] = 0
+            D2[n, m] = im*Awα[n,m]-im*L[n,m]
         end
     end
     return D2
@@ -864,7 +865,7 @@ Calculate Berry curvature Ω for `tm` at `k`.
     dAw_βα = HopTB.getdAw(tm, β, getorder(α), k)
     dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
     Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
-    return real(diag(Ωbar_αβ - Sbar_α * Abar_β + Sbar_β * Abar_α - im * D_α * D_β + im * D_β * D_α +  D_β * Abar_α- Abar_α * D_β- D_α * Abar_β + Abar_β * D_α ))
+    return real(diag(Ωbar_αβ - Sbar_α * Abar_β + Sbar_β * Abar_α - im * D_α * D_β + im * D_β * D_α +  D_β * Abar_α - Abar_α * D_β- D_α * Abar_β + Abar_β * D_α ))
 end
 
 @memoize k function get_berry_curvature2(tm::AbstractTBModel, α::Int64, β::Int64, k::Vector{<:Real})
@@ -941,6 +942,34 @@ end
     D_αγ = HopTB.getD2(tm,α,γ,k)
     D_βγ = HopTB.getD2(tm,β,γ,k)
     return real(diag(-im*D_α*D_βγ -im*D_αγ*D_β+im * D_βγ * D_α+im * D_β * D_αγ))
+end
+
+@memoize k function get_berry_curvature_dipoledft(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64, k::Vector{<:Real})
+     _, V = geteig(tm, k)
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    D_γ = HopTB.getD(tm, γ, k)
+    D_αγ = HopTB.getD2(tm,α,γ,k)
+    D_βγ = HopTB.getD2(tm,β,γ,k)
+    Sbar_α = V' * getdS(tm, getorder(α), k) * V
+    Sbar_β = V' * getdS(tm, getorder(β), k) * V
+    Sbar_αγ = V' * getdS(tm, getorder(α,γ), k) * V
+    Sbar_βγ = V' * getdS(tm, getorder(β,γ), k) * V
+    Abar_α =V'* HopTB.getAw(tm, α, k) *V
+    Abar_β =V'* HopTB.getAw(tm, β, k) *V
+    Abar_αγ =V'* HopTB.getdAw(tm, α,getorder(γ), k) *V
+    Abar_βγ =V'* HopTB.getdAw(tm, β,getorder(γ), k) *V
+    dAw_βαγ = HopTB.getdAw(tm, β, getorder(α,γ), k)
+    dAw_αβγ = HopTB.getdAw(tm, α, getorder(β,γ), k)
+    dAw_βα = HopTB.getdAw(tm, β, getorder(α), k)
+    dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
+    Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
+    Ωbar_αβ_γ = V' * (dAw_βαγ - dAw_αβγ) * V
+    return real(diag(Ωbar_αβ_γ - Sbar_αγ * Abar_β + Sbar_βγ * Abar_α+  D_βγ * Abar_α - Abar_αγ * D_β- D_αγ * Abar_β + Abar_βγ * D_α
+            - Sbar_α * Abar_βγ + Sbar_β * Abar_αγ+  D_β * Abar_αγ - Abar_α * D_βγ- D_α * Abar_βγ + Abar_β * D_αγ
+            - D_γ*Ωbar_αβ+Ωbar_αβ*D_γ+D_γ*Sbar_α* Abar_β-Sbar_α*D_γ*Abar_β-D_γ*Sbar_β*Abar_α + Sbar_β*D_γ*Abar_α+D_γ*Abar_α* D_β-Abar_α*D_γ * D_β-D_γ*Abar_β * D_α+Abar_β*D_γ*D_α
+            +Sbar_α*D_γ* Abar_β-Sbar_α*Abar_β*D_γ-Sbar_β *D_γ*Abar_α+Sbar_β * Abar_α*D_γ-D_β *D_γ* Abar_α+D_β * Abar_α*D_γ+ D_α * D_γ *Abar_β- D_α * Abar_β*D_γ 
+            -im*D_α*D_βγ -im*D_αγ*D_β+im * D_βγ * D_α+im * D_β * D_αγ))
 end
 
 
