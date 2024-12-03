@@ -965,10 +965,14 @@ end
     dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
     Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
     Ωbar_αβ_γ = V' * (dAw_βαγ - dAw_αβγ) * V
-    return real(diag(Ωbar_αβ_γ - Sbar_αγ * Abar_β + Sbar_βγ * Abar_α+  D_βγ * Abar_α - Abar_αγ * D_β- D_αγ * Abar_β + Abar_βγ * D_α
-            - Sbar_α * Abar_βγ + Sbar_β * Abar_αγ+  D_β * Abar_αγ - Abar_α * D_βγ- D_α * Abar_βγ + Abar_β * D_αγ
-            - D_γ*Ωbar_αβ+Ωbar_αβ*D_γ+D_γ*Sbar_α* Abar_β-Sbar_α*D_γ*Abar_β-D_γ*Sbar_β*Abar_α + Sbar_β*D_γ*Abar_α+D_γ*Abar_α* D_β-Abar_α*D_γ * D_β-D_γ*Abar_β * D_α+Abar_β*D_γ*D_α
-            +Sbar_α*D_γ* Abar_β-Sbar_α*Abar_β*D_γ-Sbar_β *D_γ*Abar_α+Sbar_β * Abar_α*D_γ-D_β *D_γ* Abar_α+D_β * Abar_α*D_γ+ D_α * D_γ *Abar_β- D_α * Abar_β*D_γ 
+    return real(diag(Ωbar_αβ_γ 
+            - Sbar_αγ * Abar_β + Sbar_βγ * Abar_α  +D_βγ * Abar_α - Abar_αγ * D_β- D_αγ *  Abar_β + Abar_βγ * D_α
+            - Sbar_α * Abar_βγ + Sbar_β * Abar_αγ  +D_β * Abar_αγ - Abar_α * D_βγ- D_α *  Abar_βγ + Abar_β * D_αγ
+            - D_γ*Ωbar_αβ+Ωbar_αβ*D_γ
+            +D_γ*Sbar_α*Abar_β - D_γ*Sbar_β*Abar_α +              + D_γ*Abar_α*D_β                - D_γ*Abar_β*D_α
+            -Sbar_α*Abar_β*D_γ + Sbar_β*Abar_α*D_γ +D_β*Abar_α*D_γ               - D_α*Abar_β*D_γ
+                                                                  - Abar_α*D_γ*D_β                + Abar_β*D_γ*D_α
+                                                   -D_β*D_γ*Abar_α                                + D_α*D_γ*Abar_β
             -im*D_α*D_βγ -im*D_αγ*D_β+im * D_βγ * D_α+im * D_β * D_αγ))
 end
 
@@ -1108,4 +1112,98 @@ end
     D_αγδ = HopTB.getD3(tm,α,γ,δ,k)
     D_βγδ = HopTB.getD3(tm,β,γ,δ,k)
     return real(diag(-im*D_α*D_βγδ-im*D_αδ*D_βγ -im*D_αγδ*D_β-im*D_αγ*D_βδ+im * D_βγδ * D_α+im * D_β * D_αγδ+im * D_βγ * D_αδ+im * D_βδ * D_αγ))
+end
+
+@memoize k function get_berry_curvature_quadrupoledft(tm::AbstractTBModel, α::Int64, β::Int64,γ::Int64,δ::Int64, k::Vector{<:Real})
+    _, V = geteig(tm, k)
+    Sbar_α = V' * getdS(tm, getorder(α), k) * V
+    Sbar_β = V' * getdS(tm, getorder(β), k) * V
+    Sbar_αγ = V' * getdS(tm, getorder(α,γ), k) * V
+    Sbar_βγ = V' * getdS(tm, getorder(β,γ), k) * V
+    Sbar_αδ = V' * getdS(tm, getorder(α,δ), k) * V
+    Sbar_βδ = V' * getdS(tm, getorder(β,δ), k) * V
+    Sbar_αγδ = V' * getdS(tm, getorder(α,γ,δ), k) * V
+    Sbar_βγδ = V' * getdS(tm, getorder(β,γ,δ), k) * V
+    Abar_α =V'* HopTB.getAw(tm, α, k) *V
+    Abar_β =V'* HopTB.getAw(tm, β, k) *V
+    Abar_αγ =V'* HopTB.getdAw(tm, α,getorder(γ), k) *V
+    Abar_βγ =V'* HopTB.getdAw(tm, β,getorder(γ), k) *V
+    Abar_αδ =V'* HopTB.getdAw(tm, α,getorder(δ), k) *V
+    Abar_βδ =V'* HopTB.getdAw(tm, β,getorder(δ), k) *V
+    Abar_αγδ =V'* HopTB.getdAw(tm, α,getorder(γ,δ), k) *V
+    Abar_βγδ =V'* HopTB.getdAw(tm, β,getorder(γ,δ), k) *V
+    dAw_βαγδ = HopTB.getdAw(tm, β, getorder(α,γ,δ), k)
+    dAw_αβγδ = HopTB.getdAw(tm, α, getorder(β,γ,δ), k)
+    dAw_βαδ = HopTB.getdAw(tm, β, getorder(α,δ), k)
+    dAw_αβδ = HopTB.getdAw(tm, α, getorder(β,δ), k)
+    dAw_βαγ = HopTB.getdAw(tm, β, getorder(α,γ), k)
+    dAw_αβγ = HopTB.getdAw(tm, α, getorder(β,γ), k)
+    dAw_βα = HopTB.getdAw(tm, β, getorder(α), k)
+    dAw_αβ = HopTB.getdAw(tm, α, getorder(β), k)
+    Ωbar_αβ = V' * (dAw_βα - dAw_αβ) * V
+    Ωbar_αβδ = V' * (dAw_βαδ - dAw_αβδ) * V
+    Ωbar_αβ_γ = V' * (dAw_βαγ - dAw_αβγ) * V
+    Ωbar_αβ_γδ = V' * (dAw_βαγδ - dAw_αβγδ) * V
+    D_α = HopTB.getD(tm, α, k)
+    D_β = HopTB.getD(tm, β, k)
+    D_γ = HopTB.getD(tm, γ, k)
+    D_δ = HopTB.getD(tm, δ, k)
+    D_αγ = HopTB.getD2(tm,α,γ,k)
+    D_αδ = HopTB.getD2(tm,α,δ,k)
+    D_βγ = HopTB.getD2(tm,β,γ,k)
+    D_βδ = HopTB.getD2(tm,β,δ,k)
+    D_γδ = HopTB.getD2(tm,γ,δ,k)
+    D_αγδ = HopTB.getD3(tm,α,γ,δ,k)
+    D_βγδ = HopTB.getD3(tm,β,γ,δ,k)
+    return real(diag(Ωbar_αβ_γδ 
+            - Sbar_αγδ * Abar_β + Sbar_βγδ * Abar_α  +D_βγδ * Abar_α - Abar_αγδ * D_β- D_αγδ *  Abar_β + Abar_βγδ * D_α
+                - Sbar_αγ * Abar_βδ + Sbar_βγ * Abar_αδ  +D_βγ * Abar_αδ - Abar_αγ * D_βδ- D_αγ *  Abar_βδ + Abar_βγ * D_αδ
+            - Sbar_αδ * Abar_βγ + Sbar_βδ * Abar_αγ  +D_βδ * Abar_αγ - Abar_αδ * D_βγ- D_αδ *  Abar_βγ + Abar_βδ * D_αγ
+                - Sbar_α * Abar_βγδ + Sbar_β * Abar_αγδ  +D_β * Abar_αγδ - Abar_α * D_βγδ- D_α *  Abar_βγδ + Abar_β * D_αγδ
+            - D_γδ*Ωbar_αβ+Ωbar_αβδ*D_γ
+                - D_γ*Ωbar_αβδ+Ωbar_αβ*D_γδ
+            +D_γδ*Sbar_α*Abar_β - D_γδ*Sbar_β*Abar_α +              + D_γδ*Abar_α*D_β                - D_γδ*Abar_β*D_α
+                +D_γ*Sbar_αδ*Abar_β - D_γ*Sbar_βδ*Abar_α +              + D_γ*Abar_αδ*D_β                - D_γ*Abar_βδ*D_α
+                    +D_γ*Sbar_α*Abar_βδ - D_γ*Sbar_β*Abar_αδ +              + D_γ*Abar_α*D_βδ                - D_γ*Abar_β*D_αδ
+            -Sbar_αδ*Abar_β*D_γ + Sbar_βδ*Abar_α*D_γ +D_βδ*Abar_α*D_γ               - D_αδ*Abar_β*D_γ
+                -Sbar_α*Abar_βδ*D_γ + Sbar_β*Abar_αδ*D_γ +D_β*Abar_αδ*D_γ               - D_α*Abar_βδ*D_γ
+                    -Sbar_α*Abar_β*D_γδ + Sbar_β*Abar_α*D_γδ +D_β*Abar_α*D_γδ               - D_α*Abar_β*D_γδ
+                                                                  - Abar_αδ*D_γ*D_β                + Abar_βδ*D_γ*D_α
+                                                   -D_βδ*D_γ*Abar_α                                + D_αδ*D_γ*Abar_β
+                                                                                  - Abar_α*D_γδ*D_β                + Abar_β*D_γδ*D_α
+                                                       -D_β*D_γδ*Abar_α                                + D_α*D_γδ*Abar_β
+                                                                                        - Abar_α*D_γ*D_βδ                + Abar_β*D_γ*D_αδ
+                                                            -D_β*D_γ*Abar_αδ                                + D_α*D_γ*Abar_βδ
+            - D_δ*(Ωbar_αβ_γ 
+            - Sbar_αγ * Abar_β + Sbar_βγ * Abar_α                 - Abar_αγ * D_β                 + Abar_βγ * D_α
+            - Sbar_α * Abar_βγ + Sbar_β * Abar_αγ                 - Abar_α * D_βγ                 + Abar_β * D_αγ
+                               +Ωbar_αβ*D_γ
+            
+            -Sbar_α*Abar_β*D_γ + Sbar_β*Abar_α*D_γ 
+                                                                  - Abar_α*D_γ*D_β                + Abar_β*D_γ*D_α
+                                                                                                                     )
+                                                   -D_βγ*D_δ*Abar_α              + D_αγ*D_δ*Abar_β
+                                                   -D_β*D_δ*Abar_αγ              + D_α*D_δ*Abar_βγ
+            + D_γ*D_δ*Ωbar_αβ
+            - D_γ*D_δ*Sbar_α*Abar_β + D_γ*D_δ*Sbar_β*Abar_α       - D_γ*D_δ*Abar_α*D_β            + D_γ*D_δ*Abar_β*D_α
+                                                   -D_β*D_δ*Abar_α*D_γ           + D_α*D_δ*Abar_β*D_γ
+                                                   +D_β*D_γ*D_δ*Abar_α                            - D_α*D_γ*D_δ*Abar_β
+            + (Ωbar_αβ_γ 
+            - Sbar_αγ * Abar_β + Sbar_βγ * Abar_α  +D_βγ * Abar_α                - D_αγ *  Abar_β 
+            - Sbar_α * Abar_βγ + Sbar_β * Abar_αγ  +D_β * Abar_αγ                - D_α *  Abar_βγ
+            - D_γ*Ωbar_αβ
+            +D_γ*Sbar_α*Abar_β - D_γ*Sbar_β*Abar_α                               
+            
+                                                                  
+                                                   -D_β*D_γ*Abar_α                                + D_α*D_γ*Abar_β)*D_δ
+                                                                  - Abar_αγ*D_δ*D_β               + Abar_βγ*D_δ*D_α
+                                                                  - Abar_α*D_δ*D_βγ               + Abar_β*D_δ*D_αγ
+                         +Ωbar_αβ*D_δ*D_γ
+                                                                  + D_γ*Abar_α*D_δ*D_β            - D_γ*Abar_β*D_δ*D_α
+            -Sbar_α*Abar_β*D_δ*D_γ + Sbar_β*Abar_α*D_δ*D_γ +D_β*Abar_α*D_δ*D_γ               - D_α*Abar_β*D_δ*D_γ
+                                                                  - Abar_α*D_δ*D_γ*D_β            + Abar_β*D_δ*D_γ*D_α
+            -im*D_α*D_βγδ-im*D_αδ*D_βγ
+            -im*D_αγδ*D_β-im*D_αγ*D_βδ
+            +im*D_βγδ*D_α+im*D_β*D_αγδ
+            +im*D_βγ*D_αδ+im*D_βδ*D_αγ))
 end
