@@ -4,6 +4,8 @@ using LinearAlgebra, Distributed
 using ..HopTB
 using ..HopTB.Utilities: fermidirac, constructmeshkpts, splitkpts
 using ..HopTB.Parallel: ParallelFunction, claim!, stop!, parallel_sum
+using ProgressMeter
+using Distributed
 
 export getahc
 
@@ -291,13 +293,128 @@ function get_berry_curvature_quadrupole(
         result += parallel_sum(ik -> begin
             k = fs.ks[:,ik]
             Ω= get_berry_curvature(tm, α, β, k)[fs.bandidx]
-            Eab=getdEs(tm,γ,δ,k)[fs.bandidx]
             v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
-            Ω * Eab * fs.weights[ik] / norm(v)
+            Ω * v[δ]* fs.weights[ik] / norm(v)
         end, 1:size(fs.ks, 2), 0.0)
     end
     return result / (2π)^3
 end
+
+
+@doc raw"""
+```
+get_berry_curvature_quadrupole(
+    tm::AbstractTBModel,
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64
+    fss::Vector{FermiSurface}
+)::Float64
+```
+
+Calculate
+```math
+\sum_n \int_{\text{FS}_n} \frac{d \sigma}{(2\pi)^3} \Omega_{n}^{\alpha \beta} \frac{dk_{γ}d_{δ}Es_n}{|\boldsymbol{v}_n|}
+```
+which is related to the Berry curvature quadrupole contribution to the second order photocurrent.
+"""
+function get_berry_curvature_quadrupoledft(
+    tm::AbstractTBModel, 
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64,
+    fss::Vector{FermiSurface}
+)
+    result = 0.0
+    for fs in fss
+        result += parallel_sum(ik -> begin
+            k = fs.ks[:,ik]
+            Ω= HopTB.get_berry_curvature_dipoledft(tm, α, β, γ, k)[fs.bandidx]
+            v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
+            Ω * v[δ] * fs.weights[ik] / norm(v)
+        end, 1:size(fs.ks, 2), 0.0)
+    end
+    return result / (2π)^3
+end
+
+
+function get_quantum_metric_quadrupoledft(
+    tm::AbstractTBModel, 
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64,
+    fss::Vector{FermiSurface}
+)
+    result = 0.0
+    for fs in fss
+        result += parallel_sum(ik -> begin
+            k = fs.ks[:,ik]
+            Ω= HopTB.get_quantum_metric_dipoledft(tm, α, β, γ, k)[fs.bandidx]
+            v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
+            Ω * v[δ] * fs.weights[ik] / norm(v)
+        end, 1:size(fs.ks, 2), 0.0)
+    end
+    return result / (2π)^3
+end
+
+
+
+
+
+
+function get_berry_curvature_quadrupoledft3(
+    tm::AbstractTBModel, 
+    α::Int64,
+    β::Int64,
+    γ::Int64,
+    δ::Int64,
+    fss::Vector{FermiSurface};
+    verbose::Bool=true,
+    save_details::Bool=false
+)
+    total_result = 0.0
+    details = save_details ? Vector{Tuple{Int,Float64,Float64}}() : nothing
+    
+    total_points = sum(fs -> size(fs.ks, 2), fss)
+    prog = verbose ? Progress(total_points, 0.5, "Computing Berry Curvature...") : nothing
+    
+    print_lock = ReentrantLock()
+    
+    for (fs_idx, fs) in enumerate(fss)
+        fs_result = parallel_sum(ik -> begin
+            k = fs.ks[:,ik]
+            Ω = HopTB.get_berry_curvature_dipoledft(tm, α, β, γ, k)[fs.bandidx]
+            v = real([getvelocity(tm, i, k)[fs.bandidx, fs.bandidx] for i in 1:3])
+            v_norm = norm(v)
+            contribution = Ω * v[δ] * fs.weights[ik] / v_norm
+            
+            if verbose
+                lock(print_lock) do
+                    # 使用字符串插值代替 @printf
+                    msg = "[FS $(lpad(fs_idx,2))][k-point $(rpad(ik,5))] Contribution = $(signbit(contribution) ? "-" : "+")$(abs(contribution))"
+                    println(msg)
+                    next!(prog)
+                end
+            end
+            
+            save_details && push!(details, (fs_idx, ik, contribution))
+            contribution
+        end, 1:size(fs.ks, 2), 0.0)
+        
+        verbose && @info "Fermi Surface $(fs_idx) integral: $(fs_result)"
+        total_result += fs_result
+    end
+    
+    final_result = total_result / (2π)^3
+    verbose && @info "Final result: $(final_result) (normalized by 1/(2π)^3)"
+    return save_details ? (final_result, details) : final_result
+end
+
+
+
 @doc raw"""
 ```
 get_third_Drude-like_term(
